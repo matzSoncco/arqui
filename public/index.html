@@ -146,7 +146,9 @@
         <transition name="fade" mode="out-in">
           <ol v-if="visible.length" :key="boardPage" class="board-grid">
             <li v-for="q in boardItems" :key="q.id" class="pj-note"
-                :class="[{ spotlight: q.id === spotlightId, featured: q.featured }, noteSize(q)]">
+                :class="[{ spotlight: q.id === spotlightId, featured: q.featured }, noteSize(q)]"
+                tabindex="0" role="button" :aria-label="'Abrir conclusión ' + codeOf(q.id)"
+                @click="openNote(q)" @keydown.enter="openNote(q)">
               <div class="pj-note-meta">
                 <span class="pin" aria-hidden="true"></span>
                 <span class="code">{{ codeOf(q.id) }}</span>
@@ -156,12 +158,36 @@
               <div class="pj-note-foot">
                 <span class="agree-n">● {{ voteCount(q.id) }} {{ voteCount(q.id) === 1 ? 'coincide' : 'coinciden' }}</span>
                 <span class="mod mod-inline">
-                  <button @click="feature(q)" :title="q.featured ? 'Quitar destacada' : 'Destacar'">{{ q.featured ? '☆' : '★' }}</button>
-                  <button @click="hide(q)" title="Ocultar">✕</button>
+                  <button @click.stop="feature(q)" :title="q.featured ? 'Quitar destacada' : 'Destacar'">{{ q.featured ? '☆' : '★' }}</button>
+                  <button @click.stop="hide(q)" title="Ocultar">✕</button>
                 </span>
               </div>
             </li>
           </ol>
+        </transition>
+
+        <!-- Tarjeta abierta: conclusión completa en grande -->
+        <transition name="fade">
+          <div v-if="openedNote" class="note-open" role="dialog" aria-modal="true" :aria-label="'Conclusión ' + codeOf(openedNote.id)" @click.self="closeNote">
+            <article class="note-open-card" :class="{ spotlight: openedNote.featured }">
+              <div class="pj-note-meta">
+                <span class="pin" aria-hidden="true"></span>
+                <span class="code">{{ codeOf(openedNote.id) }}</span>
+                <span v-if="openedNote.featured" class="pj-note-flag">Destacada</span>
+                <button class="note-open-close" @click="closeNote" title="Cerrar (Esc)">✕</button>
+              </div>
+              <div class="note-open-scroll">
+                <p class="note-open-text" :class="openSize(openedNote)">{{ censor(openedNote.text) }}</p>
+              </div>
+              <div class="pj-note-foot">
+                <span class="agree-n">● {{ voteCount(openedNote.id) }} {{ voteCount(openedNote.id) === 1 ? 'coincide' : 'coinciden' }} · {{ ago(openedNote.ts) }}</span>
+                <span class="mod mod-inline">
+                  <button @click="feature(openedNote)">{{ openedNote.featured ? '☆ Quitar destacada' : '★ Destacar' }}</button>
+                  <button @click="hide(openedNote); closeNote()">✕ Ocultar</button>
+                </span>
+              </div>
+            </article>
+          </div>
         </transition>
 
         <div v-if="boardPages > 1" class="pager" aria-hidden="true">

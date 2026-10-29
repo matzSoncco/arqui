@@ -526,6 +526,51 @@ html[data-view="projector"] body { background-size: 64px 64px; overflow: hidden;
 .pj-note .agree-n { font-family: var(--mono); }
 .pj-note .mod button { color: #5a5e64; border-color: #d6d5d0; background: #fff; }
 .pj-note.spotlight .mod button { color: #fff; border-color: rgba(255, 255, 255, .5); background: transparent; }
+.pj-note { cursor: pointer; transition: transform .2s var(--ease); }
+.pj-note:hover, .pj-note:focus-visible { transform: translateY(-3px); }
+.pj.idle .pj-note { cursor: none; }
+
+/* Tarjeta abierta a pantalla completa */
+.note-open {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-items: center;
+  padding: 5vh 6vw;
+  background: rgba(8, 9, 11, .82);
+  backdrop-filter: blur(4px);
+}
+.note-open-card {
+  display: flex; flex-direction: column;
+  width: min(1500px, 100%); max-height: 100%;
+  padding: 3vw 3.5vw 2vw;
+  background: #f3f2ee; color: #141517;
+  box-shadow: 0 1vw 0 rgba(0, 0, 0, .4);
+}
+.note-open-card.spotlight { background: var(--accent); color: #fff; }
+.note-open-card .pj-note-meta { font-size: clamp(.9rem, 1.2vw, 1.5rem); }
+.note-open-card .code { color: #2453c9; font-size: inherit; }
+.note-open-card.spotlight .code { color: rgba(255, 255, 255, .85); }
+.note-open-card.spotlight .pin { background: #fff; }
+.note-open-card .pj-note-flag { margin-left: 0; }
+.note-open-close {
+  margin-left: auto; padding: .3em .7em;
+  font-size: 1em; color: inherit; background: transparent;
+  border: 1px solid currentColor; opacity: .7;
+}
+.note-open-close:hover { opacity: 1; }
+.note-open-scroll { min-height: 0; overflow-y: auto; margin: 3vh 0; padding-right: 1vw; }
+.note-open-text {
+  margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -.025em;
+  overflow-wrap: anywhere;
+}
+.note-open-text.sz-s { font-size: clamp(2rem, 4.6vw, 6.5rem); }
+.note-open-text.sz-m { font-size: clamp(1.75rem, 3.6vw, 5rem); }
+.note-open-text.sz-l { font-size: clamp(1.5rem, 2.8vw, 4rem); line-height: 1.25; }
+.note-open-card .pj-note-foot { font-size: clamp(.9rem, 1.15vw, 1.4rem); padding-top: 2vh; }
+.note-open-card .mod button { color: #5a5e64; border-color: #d6d5d0; background: #fff; }
+.note-open-card.spotlight .mod button { color: #fff; border-color: rgba(255, 255, 255, .5); background: transparent; }
+.note-open-card.spotlight .pj-note-foot { border-color: rgba(255, 255, 255, .3); color: rgba(255, 255, 255, .85); }
+.pj.idle .note-open-close { opacity: .7; }
+
 .pager { display: flex; justify-content: center; gap: .6vw; }
 .pager span { width: .7vw; height: .7vw; min-width: 8px; min-height: 8px; background: var(--line); transition: background .3s var(--ease); }
 .pager span.on { background: var(--accent); }

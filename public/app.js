@@ -62,6 +62,7 @@
       const sort = ref(store.get('qa:sort', 'recent'));
       const modFilter = ref('visible');
       const boardPage = ref(0);
+      const openedId = ref(null);
       const controlsVisible = ref(true);
       const qrEl = ref(null);
       const mine = new Set(store.get('qa:mine', []));
@@ -172,7 +173,13 @@
         return spotlightId.value ? [boardOrder.value[0], ...items] : items;
       });
       watch(boardPages, (n) => { if (boardPage.value >= n) boardPage.value = 0; });
-      watch(() => visible.value.length, (n, old) => { if (n > old) boardPage.value = 0; }); // lo nuevo, a la vista
+      watch(() => visible.value.length, (n, old) => { if (n > old && !openedId.value) boardPage.value = 0; }); // lo nuevo, a la vista
+
+      // ---- Tarjeta abierta (proyector): texto completo; pausa la rotación mientras está abierta
+      const openedNote = computed(() => visible.value.find((q) => q.id === openedId.value) || null);
+      const openNote = (q) => { openedId.value = q.id; };
+      const closeNote = () => { openedId.value = null; };
+      const openSize = (q) => (q.text.length > 180 ? 'sz-l' : q.text.length > 90 ? 'sz-m' : 'sz-s');
 
       const MOD_FILTERS = {
         visible: (q) => !q.hidden,
@@ -272,7 +279,9 @@
         else document.documentElement.requestFullscreen?.();
       }
       window.addEventListener('keydown', (e) => {
-        if (route === 'projector' && e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) toggleFullscreen();
+        if (route !== 'projector') return;
+        if (e.key === 'Escape' && openedId.value) { closeNote(); return; }
+        if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) toggleFullscreen();
       });
 
       // ---- QR
@@ -297,7 +306,7 @@
           renderQR();
           pokeControls();
           setInterval(() => {
-            if (boardPages.value > 1) boardPage.value = (boardPage.value + 1) % boardPages.value;
+            if (boardPages.value > 1 && !openedId.value) boardPage.value = (boardPage.value + 1) % boardPages.value;
           }, CONFIG.boardRotateMs);
         }
         setInterval(() => { now.value = Date.now(); }, 15000);
@@ -326,7 +335,7 @@
         audienceUrlShort: audienceUrl.replace(/^https?:\/\//, '').replace(/\/$/, ''),
         mod, conn, connLabel, draft, error, notice, toast, sort, modFilter, controlsVisible, qrEl, clock,
         visible, audienceList, hiddenCount, totalVotes, modCounts, modList,
-        boardItems, boardPage, boardPages, spotlightId,
+        boardItems, boardPage, boardPages, spotlightId, openedNote, openNote, closeNote, openSize,
         draftFlagged, canSubmit, profanityMsg,
         submit, toggleVote, voteCount, hasVoted,
         feature, hide, unhide, toggleOpen, logout, pokeControls, toggleFullscreen,
