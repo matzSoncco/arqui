@@ -5,7 +5,7 @@
   else root.QAShared = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   // Cambia el namespace para "limpiar" la pizarra entre eventos o sesiones.
-  const NAMESPACE = 'arq-conf-2026-qa-v2';
+  const NAMESPACE = 'capeco-2026-conclusiones';
   const LIMITS = { minLength: 8, maxLength: 280 };
 
   // ---------------------------------------------------- Filtro de lenguaje

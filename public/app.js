@@ -1,6 +1,6 @@
-/* Pizarra de preguntas — Conferencia de Arquitectura
-   Vue 3 (CDN) + Gun.js (preguntas y votos en tiempo real + localStorage) + qrcode.js.
-   La moderación (destacar, responder, ocultar, cerrar recepción) vive en el servidor
+/* Pizarra de conclusiones — IV encuentro de la construcción CAPECO
+   Vue 3 (CDN) + Gun.js (conclusiones y "coincido" en tiempo real + localStorage) + qrcode.js.
+   La moderación (destacar, ocultar, cerrar recepción) vive en el servidor
    y llega por Server-Sent Events; solo un moderador con PIN puede cambiarla. */
 (() => {
   const { createApp, reactive, ref, computed, watch, nextTick, onMounted } = Vue;
@@ -9,6 +9,8 @@
   // ---------------------------------------------------------------- Config
   const CONFIG = {
     cooldownMs: 20000,
+    boardSlots: 6,          // casillas por página en el proyector (3 × 2)
+    boardRotateMs: 12000,   // cambio automático de página
     // Relays Gun adicionales (opcional): ['https://tu-app.onrender.com/gun']
     extraPeers: [],
   };
@@ -58,7 +60,8 @@
       const notice = ref('');
       const toast = ref('');
       const sort = ref(store.get('qa:sort', 'recent'));
-      const modFilter = ref('pending');
+      const modFilter = ref('visible');
+      const boardPage = ref(0);
       const controlsVisible = ref(true);
       const qrEl = ref(null);
       const mine = new Set(store.get('qa:mine', []));
@@ -66,9 +69,9 @@
 
       document.documentElement.dataset.view = route;
       document.title = {
-        audience: 'Pizarra de Preguntas',
-        projector: 'Proyector · Pizarra de Preguntas',
-        moderator: 'Moderación · Pizarra de Preguntas',
+        audience: 'Pizarra de Conclusiones',
+        projector: 'Proyector · Pizarra de Conclusiones',
+        moderator: 'Moderación · Pizarra de Conclusiones',
       }[route];
 
       // ---- Preguntas y votos (Gun)
@@ -134,7 +137,7 @@
         .sort((a, b) => a.ts - b.ts));
       const codes = computed(() => {
         const m = {};
-        all.value.forEach((q, i) => { m[q.id] = 'Q-' + String(i + 1).padStart(3, '0'); });
+        all.value.forEach((q, i) => { m[q.id] = 'C-' + String(i + 1).padStart(3, '0'); });
         return m;
       });
       const visible = computed(() => all.value.filter((q) => !q.hidden));
@@ -147,28 +150,33 @@
         return list.sort((a, b) => b.ts - a.ts);
       });
 
-      const pending = computed(() => visible.value.filter((q) => !q.answered));
-      const featuredList = computed(() => pending.value.filter((q) => q.featured).sort((a, b) => b.featured - a.featured));
-      const recentList = computed(() => [...pending.value].sort((a, b) => b.ts - a.ts));
-      const stage = computed(() => featuredList.value[0] || recentList.value[0] || null);
-      const queue = computed(() => {
-        const out = [];
-        const seen = new Set(stage.value ? [stage.value.id] : []);
-        for (const q of [...featuredList.value, ...recentList.value]) {
-          if (seen.has(q.id)) continue;
-          seen.add(q.id);
-          out.push(q);
-          if (out.length === 4) break;
-        }
-        return out;
-      });
-      const answeredCount = computed(() => visible.value.filter((q) => q.answered).length);
       const hiddenCount = computed(() => all.value.length - visible.value.length);
+      const totalVotes = computed(() => visible.value.reduce((n, q) => n + voteCount(q.id), 0));
+
+      // ---- Pizarra del proyector: destacadas primero, luego las más recientes.
+      // La destacada más reciente ocupa dos casillas y se mantiene en todas las páginas.
+      const boardOrder = computed(() => [
+        ...visible.value.filter((q) => q.featured).sort((a, b) => b.featured - a.featured),
+        ...visible.value.filter((q) => !q.featured).sort((a, b) => b.ts - a.ts),
+      ]);
+      const spotlightId = computed(() => {
+        const first = boardOrder.value[0];
+        return first && first.featured ? first.id : null;
+      });
+      const boardRest = computed(() => (spotlightId.value ? boardOrder.value.slice(1) : boardOrder.value));
+      const perPage = computed(() => CONFIG.boardSlots - (spotlightId.value ? 2 : 0));
+      const boardPages = computed(() => Math.max(1, Math.ceil(boardRest.value.length / perPage.value)));
+      const boardItems = computed(() => {
+        const p = Math.min(boardPage.value, boardPages.value - 1);
+        const items = boardRest.value.slice(p * perPage.value, (p + 1) * perPage.value);
+        return spotlightId.value ? [boardOrder.value[0], ...items] : items;
+      });
+      watch(boardPages, (n) => { if (boardPage.value >= n) boardPage.value = 0; });
+      watch(() => visible.value.length, (n, old) => { if (n > old) boardPage.value = 0; }); // lo nuevo, a la vista
 
       const MOD_FILTERS = {
-        pending: (q) => !q.hidden && !q.answered,
+        visible: (q) => !q.hidden,
         featured: (q) => !q.hidden && q.featured,
-        answered: (q) => !q.hidden && q.answered,
         hidden: (q) => q.hidden,
         all: () => true,
       };
@@ -181,21 +189,21 @@
       // ---- Envío
       const draftFlagged = computed(() => QA.Profanity.has(draft.value));
       const canSubmit = computed(() => mod.open && draft.value.trim().length >= QA.LIMITS.minLength && !draftFlagged.value);
-      const profanityMsg = 'Tu pregunta contiene lenguaje no apropiado para el evento. Reformúlala, por favor.';
+      const profanityMsg = 'Tu conclusión contiene lenguaje no apropiado para el evento. Reformúlala, por favor.';
 
       let noticeTimer;
       function submit() {
         error.value = '';
         notice.value = '';
-        if (!mod.open) { error.value = 'La recepción de preguntas está cerrada en este momento.'; return; }
+        if (!mod.open) { error.value = 'La pizarra está cerrada a nuevas conclusiones en este momento.'; return; }
         const text = QA.cleanText(draft.value);
-        if (text.length < QA.LIMITS.minLength) { error.value = 'Escribe una pregunta un poco más completa.'; return; }
+        if (text.length < QA.LIMITS.minLength) { error.value = 'Escribe una conclusión un poco más completa.'; return; }
         if (text.length > QA.LIMITS.maxLength) { error.value = `Máximo ${QA.LIMITS.maxLength} caracteres.`; return; }
         if (QA.Profanity.has(text)) { error.value = profanityMsg; return; }
         const wait = store.get('qa:last', 0) + CONFIG.cooldownMs - Date.now();
-        if (wait > 0) { error.value = `Espera ${Math.ceil(wait / 1000)} s antes de enviar otra pregunta.`; return; }
+        if (wait > 0) { error.value = `Espera ${Math.ceil(wait / 1000)} s antes de publicar otra conclusión.`; return; }
         if (visible.value.some((q) => q.text.toLowerCase() === text.toLowerCase())) {
-          error.value = 'Esa pregunta ya está en la pizarra. Puedes votarla.';
+          error.value = 'Esa conclusión ya está en la pizarra. Puedes marcar «Coincido».';
           return;
         }
 
@@ -208,13 +216,13 @@
           store.set('qa:rejected', [...rejected].slice(-50));
           delete questions[id];
           notice.value = '';
-          error.value = 'El servidor no aceptó la pregunta. Inténtalo de nuevo más tarde.';
+          error.value = 'El servidor no aceptó la conclusión. Inténtalo de nuevo más tarde.';
         });
         mine.add(id);
         store.set('qa:mine', [...mine]);
         store.set('qa:last', ts);
         draft.value = '';
-        notice.value = 'Pregunta enviada. Ya está en la pizarra.';
+        notice.value = 'Conclusión publicada. Ya está en la pizarra.';
         clearTimeout(noticeTimer);
         noticeTimer = setTimeout(() => { notice.value = ''; }, 4000);
       }
@@ -244,8 +252,7 @@
         }
       }
       const feature = (q) => modAction('feature', q.id);
-      const markAnswered = (q) => modAction('answer', q.id);
-      const hide = (q) => { if (route !== 'projector' || confirm('¿Ocultar esta pregunta?')) modAction('hide', q.id); };
+      const hide = (q) => { if (route !== 'projector' || confirm('¿Ocultar esta conclusión?')) modAction('hide', q.id); };
       const unhide = (q) => modAction('unhide', q.id);
       const toggleOpen = () => modAction(mod.open ? 'close' : 'open');
       async function logout() {
@@ -286,7 +293,13 @@
       }
 
       onMounted(() => {
-        if (route === 'projector') { renderQR(); pokeControls(); }
+        if (route === 'projector') {
+          renderQR();
+          pokeControls();
+          setInterval(() => {
+            if (boardPages.value > 1) boardPage.value = (boardPage.value + 1) % boardPages.value;
+          }, CONFIG.boardRotateMs);
+        }
         setInterval(() => { now.value = Date.now(); }, 15000);
       });
 
@@ -303,7 +316,7 @@
         return new Date(ts).toLocaleDateString('es', { day: 'numeric', month: 'short' });
       };
       const clock = computed(() => new Date(now.value).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }));
-      const sizeClass = (t) => (t.length > 200 ? 'len-l' : t.length > 110 ? 'len-m' : '');
+      const noteSize = (q) => (q.text.length > 180 ? 'sz-l' : q.text.length > 90 ? 'sz-m' : 'sz-s');
       const setSort = (s) => { sort.value = s; store.set('qa:sort', s); };
 
       return {
@@ -312,11 +325,12 @@
         audienceUrl,
         audienceUrlShort: audienceUrl.replace(/^https?:\/\//, '').replace(/\/$/, ''),
         mod, conn, connLabel, draft, error, notice, toast, sort, modFilter, controlsVisible, qrEl, clock,
-        visible, audienceList, stage, queue, answeredCount, hiddenCount, modCounts, modList,
+        visible, audienceList, hiddenCount, totalVotes, modCounts, modList,
+        boardItems, boardPage, boardPages, spotlightId,
         draftFlagged, canSubmit, profanityMsg,
         submit, toggleVote, voteCount, hasVoted,
-        feature, markAnswered, hide, unhide, toggleOpen, logout, pokeControls, toggleFullscreen,
-        pad, codeOf, ago, sizeClass, setSort,
+        feature, hide, unhide, toggleOpen, logout, pokeControls, toggleFullscreen,
+        pad, codeOf, ago, noteSize, setSort,
         censor: QA.Profanity.censor,
       };
     },

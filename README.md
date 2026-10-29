@@ -1,12 +1,13 @@
-# Pizarra de preguntas · Conferencia de Arquitectura
+# Pizarra de conclusiones · IV encuentro de la construcción CAPECO
 
-Q&A anónimo en tiempo real. Vue 3 (CDN) + Gun.js + qrcode.js. Sin base de datos.
+Pizarra didáctica en tiempo real donde los participantes publican sus conclusiones, de forma anónima.
+Vue 3 (CDN) + Gun.js + qrcode.js. Sin base de datos.
 
 | Ruta | Quién | Qué hace |
 |---|---|---|
-| `/` | Público | Enviar y votar preguntas. Sin registro. |
-| `/proyector` | Moderadores (PIN) | Pantalla gigante: pregunta destacada, cola, QR. Mueve el ratón para ver controles. **F** = pantalla completa. |
-| `/moderar` | Moderadores (PIN) | Panel para móvil o portátil: destacar, marcar respondida, ocultar/mostrar, abrir o cerrar la recepción. |
+| `/` | Participantes | Publicar conclusiones y marcar «Coincido». Sin registro. |
+| `/proyector` | Moderadores (PIN) | Pizarra a pantalla completa con tarjetas (6 por página, rota cada 12 s), destacada en grande y QR. Mueve el ratón para ver los controles. **F** = pantalla completa. |
+| `/moderar` | Moderadores (PIN) | Panel para móvil o portátil: destacar, ocultar o mostrar, y abrir o cerrar la recepción. |
 
 ## Local
 
