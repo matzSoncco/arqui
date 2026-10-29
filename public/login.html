@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Acceso de moderación</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="login">
+    <form id="f" class="login-card" novalidate>
+      <svg class="shapes" viewBox="0 0 84 28" aria-hidden="true">
+        <circle cx="14" cy="14" r="12" class="s-accent"/>
+        <rect x="30" y="2" width="24" height="24" class="s-ink"/>
+        <polygon points="58,26 70,2 82,26" class="s-line"/>
+      </svg>
+      <p class="eyebrow">Acceso restringido</p>
+      <h1 id="t">Moderación</h1>
+      <p class="muted login-sub">Introduce el PIN del equipo organizador.</p>
+      <label for="pin" class="ask-label"><span>PIN</span></label>
+      <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="32" required autofocus aria-describedby="msg">
+      <button type="submit" class="btn-primary">Entrar <span aria-hidden="true">→</span></button>
+      <p id="msg" class="ask-msg" role="alert" aria-live="assertive"></p>
+      <a class="login-back" href="/">← Volver a la pizarra</a>
+    </form>
+  </main>
+  <script>
+    const view = location.pathname.includes('proyector') ? 'Modo proyector' : 'Panel de moderación';
+    document.getElementById('t').textContent = view;
+    document.title = 'Acceso · ' + view;
+
+    const form = document.getElementById('f');
+    const msg = document.getElementById('msg');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pin = form.pin.value.trim();
+      if (!pin) return;
+      const btn = form.querySelector('button');
+      btn.disabled = true;
+      msg.innerHTML = '';
+      try {
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        });
+        if (r.ok) { location.reload(); return; }
+        const data = await r.json().catch(() => ({}));
+        msg.innerHTML = '<span class="msg-error"><i></i></span>';
+        msg.firstChild.append(data.error || 'No se pudo iniciar sesión.');
+        form.pin.value = '';
+        form.pin.focus();
+      } catch {
+        msg.innerHTML = '<span class="msg-error"><i></i>Sin conexión con el servidor.</span>';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5f2">
+  <title>Pizarra de Preguntas</title>
+  <meta name="description" content="Envía tu pregunta a los ponentes. Anónimo, sin registro.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- ============================================================
+       VISTA AUDIENCIA
+       ============================================================ -->
+  <div v-if="route === 'audience'" class="aud">
+    <header class="titleblock">
+      <div class="tb-brand">
+        <svg class="shapes" viewBox="0 0 84 28" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" class="s-accent"/>
+          <rect x="30" y="2" width="24" height="24" class="s-ink"/>
+          <polygon points="58,26 70,2 82,26" class="s-line"/>
+        </svg>
+        <div>
+          <p class="eyebrow">IV encuentro de la construcción CAPECO · 2026</p>
+          <h1>Pizarra de preguntas</h1>
+        </div>
+      </div>
+      <dl class="tb-cells">
+        <div><dt>Lámina</dt><dd>Q&amp;A-01</dd></div>
+        <div><dt>Preguntas</dt><dd>{{ pad(visible.length, 2) }}</dd></div>
+        <div><dt>Estado</dt><dd><span class="dot" :class="conn"></span>{{ connLabel }}</dd></div>
+      </dl>
+    </header>
+
+    <main class="aud-main">
+      <form class="ask" :class="{ closed: !mod.open }" @submit.prevent="submit" novalidate>
+        <p v-if="!mod.open" class="closed-banner" role="status">
+          <i aria-hidden="true"></i>La recepción de preguntas está cerrada. Puedes seguir votando.
+        </p>
+        <label for="q" class="ask-label">
+          <span>Tu pregunta</span>
+          <span class="muted">Anónima · sin registro</span>
+        </label>
+        <textarea
+          id="q"
+          v-model="draft"
+          :maxlength="maxLength"
+          rows="3"
+          :disabled="!mod.open"
+          placeholder="¿Qué le quieres preguntar al ponente?"
+          :class="{ flagged: draftFlagged }"
+          :aria-invalid="draftFlagged || !!error"
+          aria-describedby="ask-msg"
+          @keydown.enter.exact.prevent="submit"
+          @input="error = ''"></textarea>
+        <div class="ask-foot">
+          <span class="counter" :class="{ near: draft.length > maxLength - 30 }">{{ draft.length }} / {{ maxLength }}</span>
+          <button type="submit" class="btn-primary" :disabled="!canSubmit">
+            Enviar pregunta <span aria-hidden="true">→</span>
+          </button>
+        </div>
+        <p id="ask-msg" class="ask-msg" role="status" aria-live="polite">
+          <span v-if="draftFlagged || error" class="msg-error"><i aria-hidden="true"></i>{{ draftFlagged ? profanityMsg : error }}</span>
+          <span v-else-if="notice" class="msg-ok"><i aria-hidden="true"></i>{{ notice }}</span>
+        </p>
+      </form>
+
+      <section class="board" aria-labelledby="board-title">
+        <div class="board-head">
+          <h2 id="board-title">En la pizarra</h2>
+          <div class="tabs" role="tablist">
+            <button role="tab" :aria-selected="sort === 'recent'" :class="{ on: sort === 'recent' }" @click="setSort('recent')">Recientes</button>
+            <button role="tab" :aria-selected="sort === 'top'" :class="{ on: sort === 'top' }" @click="setSort('top')">Más votadas</button>
+          </div>
+        </div>
+
+        <p v-if="!visible.length" class="empty">
+          Aún no hay preguntas. La primera línea del plano es tuya.
+        </p>
+
+        <transition-group name="list" tag="ol" class="cards">
+          <li v-for="q in audienceList" :key="q.id" class="card" :class="{ featured: q.featured && !q.answered, answered: q.answered }">
+            <div class="card-body">
+              <div class="card-meta">
+                <span class="code">{{ codeOf(q.id) }}</span>
+                <span>{{ ago(q.ts) }}</span>
+                <span v-if="q.featured && !q.answered" class="tag tag-accent">En pantalla</span>
+                <span v-if="q.answered" class="tag">Respondida</span>
+              </div>
+              <p class="card-text">{{ censor(q.text) }}</p>
+            </div>
+            <button class="vote" :class="{ on: hasVoted(q.id) }" @click="toggleVote(q)"
+                    :aria-pressed="hasVoted(q.id)" :aria-label="(hasVoted(q.id) ? 'Quitar voto' : 'Votar') + ' · ' + voteCount(q.id) + ' votos'">
+              <svg viewBox="0 0 12 8" aria-hidden="true"><polygon points="6,0 12,8 0,8"/></svg>
+              <span>{{ voteCount(q.id) }}</span>
+            </button>
+          </li>
+        </transition-group>
+      </section>
+    </main>
+
+    <footer class="aud-foot">
+      <span>Las preguntas pasan por un filtro automático y por el equipo de moderación.</span>
+    </footer>
+  </div>
+
+  <!-- ============================================================
+       VISTA PROYECTOR
+       ============================================================ -->
+  <div v-else-if="route === 'projector'" class="pj" :class="{ idle: !controlsVisible }" @mousemove="pokeControls" @touchstart.passive="pokeControls">
+    <header class="pj-top">
+      <div class="pj-brand">
+        <svg class="shapes" viewBox="0 0 84 28" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" class="s-accent"/>
+          <rect x="30" y="2" width="24" height="24" class="s-ink"/>
+          <polygon points="58,26 70,2 82,26" class="s-line"/>
+        </svg>
+        <div>
+          <p class="eyebrow">IV encuentro de la construcción CAPECO · 2026</p>
+          <p class="pj-title">Preguntas del público</p>
+        </div>
+      </div>
+      <div class="pj-status">
+        <span class="live"><span class="dot" :class="conn"></span>{{ connLabel }}</span>
+        <span class="clock">{{ clock }}</span>
+        <div class="pj-ctrl">
+          <button @click="toggleFullscreen" title="Pantalla completa (F)">⛶</button>
+          <a href="/moderar" target="_blank" rel="noopener" title="Abrir panel de moderación">Moderar ↗</a>
+          <button @click="logout" title="Cerrar sesión de moderador">Salir</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="pj-main">
+      <section class="stage" aria-live="polite">
+        <transition name="fade" mode="out-in">
+          <div v-if="stage" :key="stage.id" class="stage-inner">
+            <p class="stage-label">
+              <span class="sq" aria-hidden="true"></span>
+              {{ stage.featured ? 'Pregunta destacada' : 'Última pregunta' }}
+            </p>
+            <blockquote class="stage-text" :class="sizeClass(stage.text)">{{ censor(stage.text) }}</blockquote>
+            <div class="stage-meta">
+              <span class="code">{{ codeOf(stage.id) }}</span>
+              <span>{{ voteCount(stage.id) }} {{ voteCount(stage.id) === 1 ? 'voto' : 'votos' }}</span>
+              <span>{{ ago(stage.ts) }}</span>
+            </div>
+            <div class="mod">
+              <button @click="feature(stage)">{{ stage.featured ? '☆ Quitar destacada' : '★ Destacar' }}</button>
+              <button @click="markAnswered(stage)">✓ Respondida</button>
+              <button @click="hide(stage)">✕ Ocultar</button>
+            </div>
+          </div>
+          <div v-else key="empty" class="stage-inner stage-empty">
+            <p class="stage-label"><span class="sq" aria-hidden="true"></span>Esperando preguntas</p>
+            <p class="stage-text">Escanea el código y envía la primera pregunta.</p>
+          </div>
+        </transition>
+
+        <div v-if="queue.length" class="queue">
+          <p class="queue-label">A continuación</p>
+          <transition-group name="list" tag="ol">
+            <li v-for="q in queue" :key="q.id">
+              <span class="code">{{ codeOf(q.id) }}</span>
+              <span class="queue-text">{{ censor(q.text) }}</span>
+              <span class="queue-votes"><svg viewBox="0 0 12 8" aria-hidden="true"><polygon points="6,0 12,8 0,8"/></svg>{{ voteCount(q.id) }}</span>
+              <span class="mod mod-inline">
+                <button @click="feature(q)" :title="q.featured ? 'Quitar destacada' : 'Destacar'">{{ q.featured ? '☆' : '★' }}</button>
+                <button @click="markAnswered(q)" title="Marcar respondida">✓</button>
+                <button @click="hide(q)" title="Ocultar">✕</button>
+              </span>
+            </li>
+          </transition-group>
+        </div>
+      </section>
+
+      <aside class="pj-side">
+        <div class="qr-card">
+          <div ref="qrEl" class="qr" role="img" :aria-label="'Código QR hacia ' + audienceUrl"></div>
+          <p class="qr-title">Escanea y pregunta</p>
+          <p class="qr-url">{{ audienceUrlShort }}</p>
+        </div>
+        <dl class="stats">
+          <div><dt>Preguntas</dt><dd>{{ pad(visible.length, 2) }}</dd></div>
+          <div><dt>Respondidas</dt><dd>{{ pad(answeredCount, 2) }}</dd></div>
+        </dl>
+      </aside>
+    </main>
+
+    <footer class="pj-foot">
+      <span v-if="mod.open">Anónimo · Sin registro · Vota las preguntas que quieras escuchar</span>
+      <span v-else>Recepción de preguntas cerrada · Gracias por participar</span>
+      <span class="hint">F · pantalla completa — mueve el ratón para moderar</span>
+    </footer>
+  </div>
+
+  <!-- ============================================================
+       PANEL DE MODERACIÓN (/moderar)
+       ============================================================ -->
+  <div v-else class="aud modp">
+    <header class="titleblock">
+      <div class="tb-brand">
+        <svg class="shapes" viewBox="0 0 84 28" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" class="s-accent"/>
+          <rect x="30" y="2" width="24" height="24" class="s-ink"/>
+          <polygon points="58,26 70,2 82,26" class="s-line"/>
+        </svg>
+        <div>
+          <p class="eyebrow">IV encuentro de la construcción CAPECO · 2026</p>
+          <h1>Moderación</h1>
+        </div>
+      </div>
+      <dl class="tb-cells">
+        <div><dt>Visibles</dt><dd>{{ pad(visible.length, 2) }}</dd></div>
+        <div><dt>Ocultas</dt><dd>{{ pad(hiddenCount, 2) }}</dd></div>
+        <div><dt>Estado</dt><dd><span class="dot" :class="conn"></span>{{ connLabel }}</dd></div>
+      </dl>
+    </header>
+
+    <section class="mod-bar">
+      <div>
+        <p class="eyebrow">Recepción de preguntas</p>
+        <p class="mod-state"><span class="sq" :class="{ off: !mod.open }" aria-hidden="true"></span>{{ mod.open ? 'Abierta' : 'Cerrada' }}</p>
+      </div>
+      <div class="mod-bar-actions">
+        <button class="btn-primary" @click="toggleOpen">{{ mod.open ? 'Cerrar recepción' : 'Abrir recepción' }}</button>
+        <a class="btn-ghost" href="/proyector" target="_blank" rel="noopener">Proyector ↗</a>
+        <button class="btn-ghost" @click="logout">Cerrar sesión</button>
+      </div>
+    </section>
+
+    <section class="board">
+      <div class="board-head">
+        <h2>Preguntas</h2>
+        <div class="tabs tabs-wrap" role="tablist">
+          <button v-for="(label, key) in { pending: 'Pendientes', featured: 'Destacadas', answered: 'Respondidas', hidden: 'Ocultas', all: 'Todas' }"
+                  :key="key" role="tab" :aria-selected="modFilter === key" :class="{ on: modFilter === key }" @click="modFilter = key">
+            {{ label }} <span class="tab-n">{{ modCounts[key] }}</span>
+          </button>
+        </div>
+      </div>
+
+      <p v-if="!modList.length" class="empty">No hay preguntas en esta categoría.</p>
+
+      <transition-group name="list" tag="ol" class="cards">
+        <li v-for="q in modList" :key="q.id" class="card mod-card" :class="{ featured: q.featured && !q.hidden, answered: q.answered, hidden: q.hidden }">
+          <div class="card-body">
+            <div class="card-meta">
+              <span class="code">{{ codeOf(q.id) }}</span>
+              <span>{{ ago(q.ts) }}</span>
+              <span>{{ voteCount(q.id) }} {{ voteCount(q.id) === 1 ? 'voto' : 'votos' }}</span>
+              <span v-if="q.featured && !q.hidden" class="tag tag-accent">En pantalla</span>
+              <span v-if="q.answered" class="tag">Respondida</span>
+              <span v-if="q.hidden" class="tag">Oculta</span>
+            </div>
+            <p class="card-text">{{ censor(q.text) }}</p>
+            <div class="mod-actions">
+              <template v-if="!q.hidden">
+                <button @click="feature(q)" :class="{ on: q.featured }">{{ q.featured ? '☆ Quitar de pantalla' : '★ Destacar' }}</button>
+                <button @click="markAnswered(q)" :class="{ on: q.answered }">{{ q.answered ? '↺ Reabrir' : '✓ Respondida' }}</button>
+                <button @click="hide(q)">✕ Ocultar</button>
+              </template>
+              <button v-else @click="unhide(q)">↺ Mostrar de nuevo</button>
+            </div>
+          </div>
+        </li>
+      </transition-group>
+    </section>
+  </div>
+
+  <transition name="fade">
+    <p v-if="toast" class="toast" role="alert">{{ toast }}</p>
+  </transition>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1240/gun.js"></script>
+<script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/shared.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

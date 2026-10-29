@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: arqui-qa
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: MOD_PIN          # PIN de moderación: Render lo pedirá al crear el servicio
+        sync: false
+      - key: SESSION_SECRET   # firma de las sesiones de moderador
+        generateValue: true
